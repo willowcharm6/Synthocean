@@ -1,5 +1,3 @@
-# hello
-# poop
 import pygame
 from producer import Producer
 from consumer import Consumer
@@ -13,12 +11,17 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption('Producer and Consumer Simulation')
 
 # Create instances
-producer = Producer()
 consumer = Consumer()
 
+# Create a group for producers
+producers = pygame.sprite.Group()
+for _ in range(20):  # Adjust the number of producers as needed
+    producer = Producer()
+    producers.add(producer)
+
 all_sprites = pygame.sprite.Group()
-all_sprites.add(producer)
 all_sprites.add(consumer)
+all_sprites.add(producers)
 
 # Main game loop
 running = True
@@ -28,7 +31,8 @@ while running:
             running = False
 
     # Update all sprites
-    all_sprites.update()
+    consumer.update(producers)
+    producers.update()  # Assuming Producers have an update method (not necessary if static)
 
     # Draw everything
     screen.fill((255, 255, 255))  # White background
