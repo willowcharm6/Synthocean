@@ -15,7 +15,7 @@ consumer = Consumer(WIDTH, HEIGHT)
 
 # Create a group for producers
 producers = pygame.sprite.Group()
-for _ in range(20):  # Adjust the number of producers as needed
+for _ in range(5):  # Adjust the number of producers as needed
     producer = Producer()
     producers.add(producer)
 

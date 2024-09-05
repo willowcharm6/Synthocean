@@ -16,9 +16,16 @@ class Consumer(pygame.sprite.Sprite):
         self.reproductive_urge = 0
         self.last_reproduce_time = time.time()
         self.last_hunger_time = time.time()
+<<<<<<< HEAD
         self.last_move_time = time.time()
         self.screen_width = screen_width
         self.screen_height = screen_height
+=======
+
+        # Movement attributes
+        self.direction = pygame.math.Vector2(0, 0)
+        self.speed = 2  # Speed of the consumer
+>>>>>>> 2d2dbbeb34e28550f22ebe9f7eb2bc5174d484d1
 
     def update(self, producers):
         current_time = time.time()
@@ -70,8 +77,27 @@ class Consumer(pygame.sprite.Sprite):
             self.rect.bottom = 0
         
 
+    def move(self):
+        if self.direction.length() == 0:
+            # Change direction randomly
+            self.direction.x = random.choice([-1, 1])
+            self.direction.y = random.choice([-1, 1])
+
+        # Normalize the direction vector and apply speed
+        self.direction = self.direction.normalize() * self.speed
+
+        # Update position
+        self.rect.x += self.direction.x
+        self.rect.y += self.direction.y
+
+        # Screen boundaries check
+        if self.rect.left < 0 or self.rect.right > 800:
+            self.direction.x *= -1
+        if self.rect.top < 0 or self.rect.bottom > 600:
+            self.direction.y *= -1
+
     def move_towards(self, producer):
-        # Move towards the producer
+        # Calculate direction towards the producer
         dx = producer.rect.centerx - self.rect.centerx
         dy = producer.rect.centery - self.rect.centery
         distance = math.hypot(dx, dy)
@@ -80,8 +106,8 @@ class Consumer(pygame.sprite.Sprite):
             dx /= distance
             dy /= distance
 
-            self.rect.x += dx * 2
-            self.rect.y += dy * 2
+            self.rect.x += dx * self.speed
+            self.rect.y += dy * self.speed
 
     def look_for_mate(self):
         print("Looking for a mate...")
