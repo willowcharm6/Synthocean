@@ -2,7 +2,7 @@ import pygame
 import random
 
 class Producer(pygame.sprite.Sprite):
-    def __init__(self):
+    def __init__(self, screen_width, screen_height):
         super().__init__()
         self.image = pygame.Surface((20, 20))
         self.image.fill((0, 255, 0))  # Green color
