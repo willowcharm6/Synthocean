@@ -10,8 +10,8 @@ WIDTH, HEIGHT = 800, 600
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption('Producer and Consumer Simulation')
 
-# Create instances
-consumer = Consumer()
+# Create a Consumer instance with screen dimensions
+consumer = Consumer(WIDTH, HEIGHT)
 
 # Create a group for producers
 producers = pygame.sprite.Group()
@@ -40,6 +40,6 @@ while running:
     pygame.display.flip()
 
     # Cap the frame rate
-    pygame.time.Clock().tick(60)
+    pygame.time.Clock().tick(120)
 
 pygame.quit()
