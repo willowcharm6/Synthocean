@@ -16,46 +16,65 @@ class Consumer(pygame.sprite.Sprite):
         self.reproductive_urge = 0
         self.last_reproduce_time = time.time()
         self.last_hunger_time = time.time()
-        self.last_move_time = time.time()
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.a = 0.4  # Logistic function sharpness, adjust as needed
         self.speed = self.calculate_speed()  # Initial speed based on hunger
         self.direction = pygame.math.Vector2(random.choice([-1, 1]), random.choice([-1, 1]))
+        self.reproduction_delay = random.uniform(3, 8)  # Each consumer waits 3-8 seconds before trying to reproduce
+        self.max_age = random.randint(250, 350)  # Set a random max age for each consumer
+        self.velocity_threshold = 0.1  # Set a lower velocity threshold for dying
 
     def calculate_speed(self):
         """Calculate speed based on hunger."""
-        return 1 / (1 + math.exp(self.a * ((-self.hunger + 10 * self.a) + 1)))
+        return max(0, 1 / (1 + math.exp(self.a * ((-self.hunger + 10 * self.a) + 1))))  # Ensure non-negative speed
 
     def update(self, producers, all_consumers):
         current_time = time.time()
-
-        # Update hunger - Decrease hunger faster, e.g., by 2 per second
-        if current_time - self.last_hunger_time > 1:
-            self.hunger -= 0.5  # Hunger decreases faster
-            self.last_hunger_time = current_time
 
         # Check if hunger reaches 0 or below
         if self.hunger <= 0:
             self.kill()  # Kill the consumer if hunger reaches 0
             return  # Exit the method if the consumer is dead
 
-        # Reproduce if conditions are met
-        if self.age > 100 and self.reproductive_urge > 20:  # Example conditions for reproduction
-            self.reproduce(all_consumers)
-        
-        # Recalculate speed based on updated hunger
-        self.speed = self.calculate_speed()
-
-        # Check for death due to age
-        if self.age > 300:
-            self.kill()
+        # Decrease hunger over time
+        if current_time - self.last_hunger_time > 5:  # Decrease hunger every 5 seconds
+            self.hunger -= 1  # Decrease hunger by 1 unit
+            self.last_hunger_time = current_time  # Reset the hunger timer
 
         # Update age
         self.age += 1 / 60  # Assuming 60 FPS
 
+        # Check for death due to age
+        if self.age > self.max_age:  # Compare age with max_age
+            self.kill()
+
+        # Check for death due to low velocity
+        if self.speed < self.velocity_threshold:  # Check against the velocity threshold
+            self.kill()  # Kill the consumer if speed is below the threshold
+
+        # Reproduce if conditions are met
+        if self.age > 100 and self.reproductive_urge > 20:  # Example conditions for reproduction
+            new_consumer = self.reproduce(all_consumers)  # Pass all_consumers as argument
+            if new_consumer:  # Check if a new consumer was created
+                return new_consumer  # Return the new consumer object
+
+        # Recalculate speed based on updated hunger
+        self.speed = self.calculate_speed()
+
+        # Reproductive urge - Random delay between reproductions
+        if current_time - self.last_reproduce_time > self.reproduction_delay:  # Random time for each consumer
+            self.reproductive_urge += 1
+            self.last_reproduce_time = current_time
+            self.reproduction_delay = random.uniform(3, 8)  # Reset random reproduction delay
+
+            # Only allow reproduction if there's enough hunger
+            if self.reproductive_urge > 20 and self.hunger > 5:  # Ensure enough hunger for reproduction
+                self.reproductive_urge = 0  # Reset urge
+                return self.reproduce(all_consumers)  # Return new consumer object
+
         # Always allow random movement
-        self.random_move()  
+        self.random_move()
 
         # Find the closest producer
         closest_producer = None
@@ -78,6 +97,25 @@ class Consumer(pygame.sprite.Sprite):
         collided_producers = pygame.sprite.spritecollide(self, producers, True)
         for producer in collided_producers:
             self.eat_producer()
+
+    def reproduce(self, all_consumers):
+        """Reproduce a new consumer."""
+        # Find a nearby consumer to reproduce with
+        for other in all_consumers:
+            if other != self and self.rect.colliderect(other.rect.inflate(50, 50)):  # Nearby consumers
+                # Create a new consumer and add it to the group
+                new_consumer = Consumer(self.screen_width, self.screen_height)
+                new_consumer.rect.center = self.rect.center  # Position the new consumer at the parent’s location
+                all_consumers.add(new_consumer)  # Add the new consumer to the consumers group
+
+                # Reset the reproductive urge
+                self.reproductive_urge = 0
+                other.reproductive_urge = 0  # Reset for the other consumer as well
+                return new_consumer  # Return the newly created consumer
+
+        # Increase the reproductive urge if reproduction doesn't happen
+        self.reproductive_urge += 1  # Increase urge over time
+        return None  # Return None if no reproduction occurred
 
     def apply_periodic_boundary(self):
         # Wrap the Consumer around if it moves out of screen boundaries
@@ -122,8 +160,9 @@ class Consumer(pygame.sprite.Sprite):
                 dx /= distance
                 dy /= distance
 
-                self.rect.x += dx * (self.speed + 2)  # Increase speed by 2 when moving towards a producer
-                self.rect.y += dy * (self.speed + 2)
+                # Move at the current speed without increasing it
+                self.rect.x += dx * self.speed  # Maintain current speed
+                self.rect.y += dy * self.speed  # Maintain current speed
 
             # Eat the producer if collided
             if self.rect.colliderect(producer.rect):
@@ -142,27 +181,10 @@ class Consumer(pygame.sprite.Sprite):
                 if self.hunger > other.hunger:
                     other.kill()  # The other consumer "dies" in the competition
                 elif self.hunger < other.hunger:
-                    self.kill()   # This consumer "dies" in the competition
+                    self.kill()  # This consumer "dies" in the competition
                 else:
                     # 50/50 chance if both have the same hunger level
                     if random.choice([True, False]):
                         other.kill()  # Randomly kill the other consumer
                     else:
-                        self.kill()   # Randomly kill this consumer
-
-    def reproduce(self, all_consumers):
-        """Reproduce a new consumer."""
-        # Find a nearby consumer to reproduce with
-        for other in all_consumers:
-            if other != self and self.rect.colliderect(other.rect.inflate(50, 50)):  # Nearby consumers
-                # Create a new consumer and add it to the group
-                new_consumer = Consumer(self.screen_width, self.screen_height)
-                new_consumer.rect.center = self.rect.center  # Position the new consumer at the parent’s location
-                all_consumers.add(new_consumer)  # Add the new consumer to the consumers group
-
-                # Reset the reproductive urge
-                self.reproductive_urge = 0
-                other.reproductive_urge = 0  # Reset for the other consumer as well
-                return  # Exit after reproducing
-        # Increase the reproductive urge
-        self.reproductive_urge += 1  # Increase urge over time
+                        self.kill()  # Randomly kill this consumer
