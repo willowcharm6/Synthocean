@@ -4,6 +4,11 @@ from producer import Producer
 from consumer import Consumer
 from fields import Field  # Import the Field class
 
+# Constants
+HIGHLIGHT_RADIUS = 100  # Radius to highlight nearby consumers
+
+# Highlight nearby consumers function
+
 # Initialize Pygame
 pygame.init()
 
@@ -18,7 +23,7 @@ producers = pygame.sprite.Group()
 fields = pygame.sprite.Group()
 
 # Define carrying capacity for producers
-carrying_capacity = 1770  # Set the maximum number of producers allowed
+carrying_capacity = 2550  # Set the maximum number of producers allowed
 
 # Create instances of consumers
 for _ in range(44):  # Adjust the number of consumers as needed
@@ -26,7 +31,7 @@ for _ in range(44):  # Adjust the number of consumers as needed
     consumers.add(consumer)
 
 # Create instances of producers
-for _ in range(170):  # Adjust the number of producers as needed
+for _ in range(100):  # Adjust the number of producers as needed
     producer = Producer(WIDTH, HEIGHT)
     producers.add(producer)
 
@@ -44,9 +49,6 @@ all_sprites.add(fields)  # Add fields to the all_sprites group
 running = True
 clock = pygame.time.Clock()
 while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
 
     # Update all consumers
     consumers.update(producers, consumers)
@@ -69,6 +71,9 @@ while running:
     all_sprites.draw(screen)  # Draw consumers and fields
     producers.draw(screen)  # Draw producers separately to ensure visibility
     pygame.display.flip()
+
+    if len(consumers) == 0:
+        pygame.quit()
 
     # Cap the frame rate
     clock.tick(60)
