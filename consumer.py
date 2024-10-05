@@ -11,7 +11,7 @@ class Consumer(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.x = random.randint(0, screen_width)
         self.rect.y = random.randint(0, screen_height)
-        self.hunger = 100
+        self.hunger = 10
         self.age = 0
         self.reproductive_urge = 0
         self.last_reproduce_time = time.time()
@@ -19,78 +19,66 @@ class Consumer(pygame.sprite.Sprite):
         self.last_move_time = time.time()
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.base_speed = 2  # Base speed value
-        self.speed = self.base_speed
+        self.a = 0.4  # Logistic function sharpness, adjust as needed
+        self.speed = self.calculate_speed()  # Initial speed based on hunger
         self.direction = pygame.math.Vector2(random.choice([-1, 1]), random.choice([-1, 1]))
 
-<<<<<<< HEAD
-        # Movement attributes
-        self.direction = pygame.math.Vector2(0, 0)
-        self.speed = 2  # Speed of the consumer
-        self.last_direction_change_time = time.time()  # Track time for direction change
+    def calculate_speed(self):
+        """Calculate speed based on hunger."""
+        return 1 / (1 + math.exp(self.a * ((-self.hunger + 10 * self.a) + 1)))
 
-    def update(self, producers):
-=======
     def update(self, producers, all_consumers):
->>>>>>> refs/remotes/origin/main
         current_time = time.time()
 
-        # Update hunger
+        # Update hunger - Decrease hunger faster, e.g., by 2 per second
         if current_time - self.last_hunger_time > 1:
-            self.hunger -= 1
+            self.hunger -= 0.5  # Hunger decreases faster
             self.last_hunger_time = current_time
+
+        # Check if hunger reaches 0 or below
+        if self.hunger <= 0:
+            self.kill()  # Kill the consumer if hunger reaches 0
+            return  # Exit the method if the consumer is dead
+
+        # Reproduce if conditions are met
+        if self.age > 100 and self.reproductive_urge > 20:  # Example conditions for reproduction
+            self.reproduce(all_consumers)
+        
+        # Recalculate speed based on updated hunger
+        self.speed = self.calculate_speed()
+
+        # Check for death due to age
+        if self.age > 300:
+            self.kill()
 
         # Update age
         self.age += 1 / 60  # Assuming 60 FPS
 
-        # Reproductive urge
-        if current_time - self.last_reproduce_time > 5:
-            self.reproductive_urge += 1
-            self.last_reproduce_time = current_time
-            if self.reproductive_urge > 20:
-                self.reproductive_urge = 0  # Reset urge
-                self.look_for_mate()
+        # Always allow random movement
+        self.random_move()  
 
-        # Check for death
-        if self.age > 300 or self.hunger <= 0:  # 5 minutes = 300 seconds or starved
-            self.kill()
+        # Find the closest producer
+        closest_producer = None
+        min_distance = float('inf')
 
-          # Movement logic
-        #self.adjust_speed_based_on_hunger()
-        self.move_towards_producer(producers)  # Move towards producers if any nearby
-        self.random_move()
+        for producer in producers:
+            distance = math.hypot(producer.rect.centerx - self.rect.centerx, producer.rect.centery - self.rect.centery)
+            if distance < min_distance:
+                min_distance = distance
+                closest_producer = producer
+
+        # If there's a nearby producer, move towards it
+        if closest_producer and min_distance < 200:  # Only move towards producers within 200 pixels
+            self.move_towards_producer(closest_producer)  # Move towards the closest producer
+
+        # Apply periodic boundary to keep the consumer within screen limits
         self.apply_periodic_boundary()
 
-        # Check distance to producers and move towards them if within 100 pixels
-        for producer in producers:
-            if self.rect.colliderect(producer.rect.inflate(100, 100)):
-                self.move_towards_producer(producers)
-                if self.rect.colliderect(producer.rect):
-                    self.compete_for_producer(producer, all_consumers)
-        
         # Check collision with producers
         collided_producers = pygame.sprite.spritecollide(self, producers, True)
         for producer in collided_producers:
             self.eat_producer()
 
-<<<<<<< HEAD
-    def move(self):
-        current_time = time.time()
-        
-        # Change direction every 4 seconds
-        if current_time - self.last_direction_change_time > 4 or self.direction.length() == 0:
-            self.direction.x = random.choice([-1, 1])
-            self.direction.y = random.choice([-1, 1])
-            self.last_direction_change_time = current_time
-
-        # Check if the direction vector is non-zero before normalizing
-=======
-    #def adjust_speed_based_on_hunger(self):
-    #    # Speed increases as hunger decreases
-    #    hunger_percentage = self.hunger / 100  # Assuming hunger is a value from 0 to 100
-    #    self.speed = self.base_speed * (2 - hunger_percentage)  # Adjust multiplier for desired effect
-
-    
     def apply_periodic_boundary(self):
         # Wrap the Consumer around if it moves out of screen boundaries
         if self.rect.right < 0:
@@ -108,7 +96,6 @@ class Consumer(pygame.sprite.Sprite):
             self.direction = pygame.math.Vector2(random.choice([-1, 1]), random.choice([-1, 1]))
 
         # Normalize the direction vector and apply speed
->>>>>>> refs/remotes/origin/main
         if self.direction.length() > 0:
             self.direction = self.direction.normalize() * self.speed
 
@@ -122,46 +109,30 @@ class Consumer(pygame.sprite.Sprite):
         if self.rect.top < 0 or self.rect.bottom > self.screen_height:
             self.direction.y *= -1
 
-<<<<<<< HEAD
+    def move_towards_producer(self, producer):
+        # Calculate the distance to the producer
+        distance = math.hypot(producer.rect.centerx - self.rect.centerx, producer.rect.centery - self.rect.centery)
 
-    def move_towards(self, producer):
-        # Calculate direction towards the producer
-        dx = producer.rect.centerx - self.rect.centerx
-        dy = producer.rect.centery - self.rect.centery
-        distance = math.hypot(dx, dy)
-=======
-    def move_towards_producer(self, producers):
-        # Check distance to producers and move towards them
-        closest_producer = None
-        min_distance = float('inf')
->>>>>>> refs/remotes/origin/main
-
-        for producer in producers:
-            distance = math.hypot(producer.rect.centerx - self.rect.centerx, producer.rect.centery - self.rect.centery)
-            if distance < min_distance:
-                min_distance = distance
-                closest_producer = producer
-
-        if closest_producer and min_distance < 200:  # Only move towards producers within a certain distance
+        if distance < 200:  # Only move towards producers within a certain distance
             # Calculate direction towards the producer
-            dx = closest_producer.rect.centerx - self.rect.centerx
-            dy = closest_producer.rect.centery - self.rect.centery
+            dx = producer.rect.centerx - self.rect.centerx
+            dy = producer.rect.centery - self.rect.centery
 
-            if min_distance > 0:
-                dx /= min_distance
-                dy /= min_distance
+            if distance > 0:
+                dx /= distance
+                dy /= distance
 
                 self.rect.x += dx * (self.speed + 2)  # Increase speed by 2 when moving towards a producer
                 self.rect.y += dy * (self.speed + 2)
 
             # Eat the producer if collided
-            if self.rect.colliderect(closest_producer.rect):
-                closest_producer.kill()
+            if self.rect.colliderect(producer.rect):
+                producer.kill()
                 self.eat_producer()
-    
+
     def eat_producer(self):
         # Eat the producer and increase hunger
-        self.hunger += 20  # Adjust as needed
+        self.hunger += 2  # Adjust as needed
 
     def compete_for_producer(self, producer, all_consumers):
         # Find the closest competing consumer
@@ -173,11 +144,25 @@ class Consumer(pygame.sprite.Sprite):
                 elif self.hunger < other.hunger:
                     self.kill()   # This consumer "dies" in the competition
                 else:
-                     # 50/50 chance if both have the same hunger level
+                    # 50/50 chance if both have the same hunger level
                     if random.choice([True, False]):
                         other.kill()  # Randomly kill the other consumer
                     else:
                         self.kill()   # Randomly kill this consumer
 
-    def look_for_mate(self):
-        print("Looking for a mate...")
+    def reproduce(self, all_consumers):
+        """Reproduce a new consumer."""
+        # Find a nearby consumer to reproduce with
+        for other in all_consumers:
+            if other != self and self.rect.colliderect(other.rect.inflate(50, 50)):  # Nearby consumers
+                # Create a new consumer and add it to the group
+                new_consumer = Consumer(self.screen_width, self.screen_height)
+                new_consumer.rect.center = self.rect.center  # Position the new consumer at the parent’s location
+                all_consumers.add(new_consumer)  # Add the new consumer to the consumers group
+
+                # Reset the reproductive urge
+                self.reproductive_urge = 0
+                other.reproductive_urge = 0  # Reset for the other consumer as well
+                return  # Exit after reproducing
+        # Increase the reproductive urge
+        self.reproductive_urge += 1  # Increase urge over time
