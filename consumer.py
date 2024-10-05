@@ -20,6 +20,7 @@ class Consumer(pygame.sprite.Sprite):
         # Movement attributes
         self.direction = pygame.math.Vector2(0, 0)
         self.speed = 2  # Speed of the consumer
+        self.last_direction_change_time = time.time()  # Track time for direction change
 
     def update(self, producers):
         current_time = time.time()
@@ -55,13 +56,17 @@ class Consumer(pygame.sprite.Sprite):
                     producer.kill()
 
     def move(self):
-        if self.direction.length() == 0:
-            # Change direction randomly
+        current_time = time.time()
+        
+        # Change direction every 4 seconds
+        if current_time - self.last_direction_change_time > 4 or self.direction.length() == 0:
             self.direction.x = random.choice([-1, 1])
             self.direction.y = random.choice([-1, 1])
+            self.last_direction_change_time = current_time
 
-        # Normalize the direction vector and apply speed
-        self.direction = self.direction.normalize() * self.speed
+        # Check if the direction vector is non-zero before normalizing
+        if self.direction.length() > 0:
+            self.direction = self.direction.normalize() * self.speed
 
         # Update position
         self.rect.x += self.direction.x
@@ -72,6 +77,7 @@ class Consumer(pygame.sprite.Sprite):
             self.direction.x *= -1
         if self.rect.top < 0 or self.rect.bottom > 600:
             self.direction.y *= -1
+
 
     def move_towards(self, producer):
         # Calculate direction towards the producer
