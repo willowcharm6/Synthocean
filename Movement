@@ -1,13 +1,14 @@
 import bpy
 import random
 import time
+import copy
 
 # Basic timing setup
 frame_start_time = time.time()
 
 # Define movement boundaries
 BOUNDARY_MIN_X = -10
-BOUNDARY_MAX_X = 10
+BOUNDARY_MAX_X = 20
 BOUNDARY_MIN_Y = -15
 BOUNDARY_MAX_Y = 15
 BOUNDARY_MIN_Z = 0
@@ -26,13 +27,57 @@ consumer_data = {
 
 # List to keep track of all producers
 producers = []
+producers.append(bpy.data.objects.get("Producer"))
 
 # Producer provides hunger points when consumed
 PRODUCER_HUNGER_POINTS = 10
 
 # Timer for spawning new producers
 last_spawn_time = frame_start_time
-SPAWN_INTERVAL = 10  # seconds
+SPAWN_INTERVAL = 3  # seconds
+
+# List to keep track of all consumers
+consumers = []
+
+def spawn_new_consumer():
+    # Find the original consumer to duplicate
+    original_consumer = bpy.data.objects.get("Consumer")
+
+    if original_consumer:
+        for _ in range(2):  # Spawn two consumers
+            new_consumer = original_consumer.copy()
+            new_consumer.data = original_consumer.data.copy()  # Ensure mesh data is copied
+            bpy.context.collection.objects.link(new_consumer)  # Add it to the scene
+
+            # Give a unique name to the new consumer
+            new_consumer.name = f"Consumer_{len(consumers) + 1}"
+
+            # Set a random location for the new consumer within bounds
+            new_consumer.location = (
+                random.uniform(BOUNDARY_MIN_X, BOUNDARY_MAX_X),
+                random.uniform(BOUNDARY_MIN_Y, BOUNDARY_MAX_Y),
+                random.uniform(BOUNDARY_MIN_Z, BOUNDARY_MAX_Z)
+            )
+
+            # Create a unique data copy for each consumer
+            new_consumer_data = copy.deepcopy(consumer_data)  # Deep copy to avoid shared references
+            consumers.append((new_consumer, new_consumer_data))  # Append the new consumer and its data
+
+            print(f"New Consumer duplicated at location: {new_consumer.location}")
+
+# Ensure the initial consumer has its own data
+initial_consumer = bpy.data.objects.get("Consumer")
+if initial_consumer:
+    # Add the initial consumer to the list along with its own data
+    initial_consumer_data = copy.deepcopy(consumer_data)  # Ensure it has unique data
+    consumers.append((initial_consumer, initial_consumer_data))  # Append as a tuple (consumer, data)
+    print(f"Initial consumer added to the list with location: {initial_consumer.location}")
+else:
+    print("No initial consumer found!")
+
+# Call the function to spawn consumers initially
+spawn_new_consumer()
+
 
 def move_consumer_randomly(consumer, consumer_data):
     current_time = time.time()
@@ -52,39 +97,25 @@ def move_consumer_randomly(consumer, consumer_data):
     consumer.location.y += direction_vector[1] * consumer_data['speed']
     consumer.location.z += direction_vector[2] * consumer_data['speed']
 
-    # Implement periodic boundary conditions
-    if consumer.location.x < BOUNDARY_MIN_X:
-        consumer.location.x = BOUNDARY_MAX_X
-    elif consumer.location.x > BOUNDARY_MAX_X:
-        consumer.location.x = BOUNDARY_MIN_X
+    # Periodic boundary conditions
+    consumer.location.x = BOUNDARY_MIN_X if consumer.location.x > BOUNDARY_MAX_X else BOUNDARY_MAX_X if consumer.location.x < BOUNDARY_MIN_X else consumer.location.x
+    consumer.location.y = BOUNDARY_MIN_Y if consumer.location.y > BOUNDARY_MAX_Y else BOUNDARY_MAX_Y if consumer.location.y < BOUNDARY_MIN_Y else consumer.location.y
+    consumer.location.z = BOUNDARY_MIN_Z if consumer.location.z > BOUNDARY_MAX_Z else BOUNDARY_MAX_Z if consumer.location.z < BOUNDARY_MIN_Z else consumer.location.z
 
-    if consumer.location.y < BOUNDARY_MIN_Y:
-        consumer.location.y = BOUNDARY_MAX_Y
-    elif consumer.location.y > BOUNDARY_MAX_Y:
-        consumer.location.y = BOUNDARY_MIN_Y
-
-    if consumer.location.z < BOUNDARY_MIN_Z:
-        consumer.location.z = BOUNDARY_MAX_Z
-    elif consumer.location.z > BOUNDARY_MAX_Z:
-        consumer.location.z = BOUNDARY_MIN_Z
-
-def check_interaction(consumer):
-    global producers  # Ensure we're working with the global producers list
-    consumed_producers = []  # List to keep track of consumed producers
-
+        
+        
+def check_interaction(consumer, consumer_data):
     # Iterate through all producers to check interactions
     for producer in producers:
-        if producer and producer.name in bpy.data.objects:  # Ensure the producer object still exists in Blender
+        if producer:  # Ensure the producer object still exists
             distance = (consumer.location - producer.location).length
             if distance < 0.5:  # If consumer is close enough to "consume" the producer
-                print(f"Consumer consumed {producer.name}!")
-                consumed_producers.append(producer)  # Add producer to consumed list
+                print(f"{consumer.name} consumed {producer.name}!")
+                bpy.data.objects.remove(producer, do_unlink=True)  # Remove producer from scene
                 consumer_data['hunger'] += PRODUCER_HUNGER_POINTS  # Increase consumer's hunger
-
-    # Remove consumed producers from scene and list
-    for producer in consumed_producers:
-        bpy.data.objects.remove(producer, do_unlink=True)  # Remove producer from scene
-        producers.remove(producer)  # Remove producer from the list
+                producers.remove(producer)  # Remove producer from the list
+                spawn_new_producer()  # Spawn a new producer to replace the consumed one
+                break  # Stop checking after consuming one producer
 
 def spawn_new_producer():
     # Find the original producer to duplicate
@@ -126,7 +157,7 @@ def initialize_producers():
     for _ in range(2):
         spawn_new_producer()  # Call the function to create the producer
 
-def update_consumer_data(consumer_data):
+def update_consumer_data(consumer, consumer_data):
     current_time = time.time()
 
     # Decrease hunger every second
@@ -137,7 +168,7 @@ def update_consumer_data(consumer_data):
     # Check if consumer's hunger reaches 0 or age surpasses 5 minutes (300 seconds)
     consumer_data['age'] += 1 / 60  # Assuming this is running every frame
     if consumer_data['hunger'] <= 0 or consumer_data['age'] > 300:
-        print("Consumer died of hunger or old age!")
+        print(f"{consumer.name} died of hunger or old age!")
         bpy.data.objects.remove(consumer, do_unlink=True)  # Remove consumer from the scene
 
 # Move producer towards consumer (to be used within sensing distance)
@@ -151,43 +182,54 @@ def move_consumer_towards_producer(consumer, producer):
 
 # Simulation loop
 def run_simulation(scene):
-    global last_spawn_time  # Declare this variable as global
-    consumer = bpy.data.objects.get('Consumer')  # Get the consumer object
-    current_time = time.time()  # Get the current time
+    # Ensure a minimum number of producers
+    if len(producers) < 2:
+        for _ in range(2 - len(producers)):
+            spawn_new_producer()
 
-    if consumer:
-        closest_producer = None
-        closest_distance = float('inf')  # Start with a large distance
-        
-        # Check all producers in the scene
-        for producer in producers:
-            if producer and producer.name in bpy.data.objects:  # Check if producer is valid in the Blender context
-                distance_to_producer = (consumer.location - producer.location).length
-                
-                # Sensing logic: Find the closest producer within sensing distance
-                if distance_to_producer < closest_distance:
-                    closest_distance = distance_to_producer
-                    closest_producer = producer
+    for consumer, consumer_data in consumers:  # Iterate through all consumers
+        if consumer:
+            closest_producer = None
+            closest_distance = float('inf')  # Start with a large distance
+            
+            # Check all producers in the scene
+            for producer in producers:
+                if producer:  # Ensure the producer object still exists
+                    distance_to_producer = (consumer.location - producer.location).length
+                    
+                    # Sensing logic: Find the closest producer within sensing distance
+                    if distance_to_producer < closest_distance:
+                        closest_distance = distance_to_producer
+                        closest_producer = producer
 
-        # If a producer is within sensing distance
-        if closest_producer and closest_distance <= consumer_data['sensing_distance']:
-            move_consumer_towards_producer(consumer, closest_producer)  # Move towards the closest producer
+            # If a producer is within sensing distance
+            if closest_producer and closest_distance <= consumer_data['sensing_distance']:
+                move_consumer_towards_producer(consumer, closest_producer)  # Move towards the closest producer
+            else:
+                move_consumer_randomly(consumer, consumer_data)  # Move randomly if no producer is close enough
+
+            # Update hunger and reproduction
+            update_consumer_data(consumer, consumer_data)  # Pass both consumer and its data
+            check_interaction(consumer, consumer_data)  # Check interaction with any producer
         else:
-            move_consumer_randomly(consumer, consumer_data)  # Move randomly if no producer is close enough
+            print("Consumer object not found!")
 
-        update_consumer_data(consumer_data)  # Update hunger and reproduction
-        check_interaction(consumer)  # Check interaction with any producer
 
-        # Check if it's time to spawn a new producer
-        if current_time - last_spawn_time >= SPAWN_INTERVAL:
-            spawn_new_producer()  # Spawn a new producer
-            last_spawn_time = current_time  # Update the last spawn time
-    else:
-        print("Consumer object not found!")
+# Clear previous handlers to prevent duplicate calls
+bpy.app.handlers.frame_change_pre.clear()
 
-# Initialize producers at the start of the simulation
+# Add the run_simulation function to frame change handlers
+bpy.app.handlers.frame_change_pre.append(run_simulation)
+
+# (Optional) Initialize your simulation parameters here if needed
 initialize_producers()
 
-# Run the simulation in Blender's scene update handler
-bpy.app.handlers.frame_change_pre.clear()  # Clear previous handlers if any
-bpy.app.handlers.frame_change_pre.append(run_simulation)  # Append simulation handler
+# Start rendering
+bpy.ops.render.opengl(animation=True)
+
+## Initialize producers at the start of the simulation
+#initialize_producers()
+
+## Run the simulation in Blender's scene update handler
+#bpy.app.handlers.frame_change_pre.clear()  # Clear previous handlers if any
+#bpy.app.handlers.frame_change_pre.append(run_simulation)  # Append simulation handler
