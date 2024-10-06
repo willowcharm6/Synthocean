@@ -1,0 +1,193 @@
+import bpy
+import random
+import time
+
+# Basic timing setup
+frame_start_time = time.time()
+
+# Define movement boundaries
+BOUNDARY_MIN_X = -10
+BOUNDARY_MAX_X = 10
+BOUNDARY_MIN_Y = -15
+BOUNDARY_MAX_Y = 15
+BOUNDARY_MIN_Z = 0
+BOUNDARY_MAX_Z = 10
+
+# Define Consumer properties
+consumer_data = {
+    'hunger': 100,
+    'age': 0,
+    'last_hunger_time': frame_start_time,
+    'speed': 0.1,  # Movement speed in Blender units per frame
+    'direction': (random.choice([-1, 1]), random.choice([-1, 1]), random.choice([-1, 1])),  # Random 3D direction
+    'last_direction_change_time': frame_start_time,
+    'sensing_distance': 5.0  # Distance within which the consumer can sense the producer
+}
+
+# List to keep track of all producers
+producers = []
+
+# Producer provides hunger points when consumed
+PRODUCER_HUNGER_POINTS = 10
+
+# Timer for spawning new producers
+last_spawn_time = frame_start_time
+SPAWN_INTERVAL = 10  # seconds
+
+def move_consumer_randomly(consumer, consumer_data):
+    current_time = time.time()
+
+    # Change direction every 4 seconds
+    if current_time - consumer_data['last_direction_change_time'] > 4:
+        consumer_data['direction'] = (
+            random.choice([-1, 1]),
+            random.choice([-1, 1]),
+            random.choice([-1, 1])  # Random movement in Z direction
+        )
+        consumer_data['last_direction_change_time'] = current_time
+
+    # Update consumer position based on the direction
+    direction_vector = consumer_data['direction']
+    consumer.location.x += direction_vector[0] * consumer_data['speed']
+    consumer.location.y += direction_vector[1] * consumer_data['speed']
+    consumer.location.z += direction_vector[2] * consumer_data['speed']
+
+    # Implement periodic boundary conditions
+    if consumer.location.x < BOUNDARY_MIN_X:
+        consumer.location.x = BOUNDARY_MAX_X
+    elif consumer.location.x > BOUNDARY_MAX_X:
+        consumer.location.x = BOUNDARY_MIN_X
+
+    if consumer.location.y < BOUNDARY_MIN_Y:
+        consumer.location.y = BOUNDARY_MAX_Y
+    elif consumer.location.y > BOUNDARY_MAX_Y:
+        consumer.location.y = BOUNDARY_MIN_Y
+
+    if consumer.location.z < BOUNDARY_MIN_Z:
+        consumer.location.z = BOUNDARY_MAX_Z
+    elif consumer.location.z > BOUNDARY_MAX_Z:
+        consumer.location.z = BOUNDARY_MIN_Z
+
+def check_interaction(consumer):
+    global producers  # Ensure we're working with the global producers list
+    consumed_producers = []  # List to keep track of consumed producers
+
+    # Iterate through all producers to check interactions
+    for producer in producers:
+        if producer and producer.name in bpy.data.objects:  # Ensure the producer object still exists in Blender
+            distance = (consumer.location - producer.location).length
+            if distance < 0.5:  # If consumer is close enough to "consume" the producer
+                print(f"Consumer consumed {producer.name}!")
+                consumed_producers.append(producer)  # Add producer to consumed list
+                consumer_data['hunger'] += PRODUCER_HUNGER_POINTS  # Increase consumer's hunger
+
+    # Remove consumed producers from scene and list
+    for producer in consumed_producers:
+        bpy.data.objects.remove(producer, do_unlink=True)  # Remove producer from scene
+        producers.remove(producer)  # Remove producer from the list
+
+def spawn_new_producer():
+    # Find the original producer to duplicate
+    original_producer = bpy.data.objects.get("Producer")
+
+    if original_producer:
+        # Duplicate the producer
+        new_producer = original_producer.copy()
+        new_producer.data = original_producer.data.copy()  # Ensure mesh data is copied
+        bpy.context.collection.objects.link(new_producer)  # Add it to the scene
+
+        # Give a unique name to the new producer
+        new_producer.name = f"Producer_{len(producers) + 1}"
+
+        # Get dimensions to calculate bounds
+        producer_dimensions = new_producer.dimensions
+        half_size_x = producer_dimensions.x / 2
+        half_size_y = producer_dimensions.y / 2
+        half_size_z = producer_dimensions.z / 2
+
+        # Define boundaries considering the size of the producer
+        x = random.uniform(BOUNDARY_MIN_X + half_size_x, BOUNDARY_MAX_X - half_size_x)
+        y = random.uniform(BOUNDARY_MIN_Y + half_size_y, BOUNDARY_MAX_Y - half_size_y)
+        z = random.uniform(BOUNDARY_MIN_Z + half_size_z, BOUNDARY_MAX_Z - half_size_z)
+
+        # Set location of the new producer
+        new_producer.location = (x, y, z)
+
+        # Append the new producer to the list
+        producers.append(new_producer)
+
+        # Print location for debugging
+        print(f"New Producer duplicated at location: ({x}, {y}, {z}), dimensions: {producer_dimensions}")
+    else:
+        print("No original 'Producer' object found to duplicate!")
+
+def initialize_producers():
+    # Spawn two initial producers at the start of the simulation
+    for _ in range(2):
+        spawn_new_producer()  # Call the function to create the producer
+
+def update_consumer_data(consumer_data):
+    current_time = time.time()
+
+    # Decrease hunger every second
+    if current_time - consumer_data['last_hunger_time'] > 1:
+        consumer_data['hunger'] -= 1
+        consumer_data['last_hunger_time'] = current_time
+
+    # Check if consumer's hunger reaches 0 or age surpasses 5 minutes (300 seconds)
+    consumer_data['age'] += 1 / 60  # Assuming this is running every frame
+    if consumer_data['hunger'] <= 0 or consumer_data['age'] > 300:
+        print("Consumer died of hunger or old age!")
+        bpy.data.objects.remove(consumer, do_unlink=True)  # Remove consumer from the scene
+
+# Move producer towards consumer (to be used within sensing distance)
+def move_consumer_towards_producer(consumer, producer):
+    direction_to_producer = producer.location - consumer.location
+    distance = direction_to_producer.length  # Calculate the current distance
+
+    if distance > 0.001:  # Avoid division by zero
+        direction_to_producer.normalize()  # Normalize the direction to get unit vector
+        consumer.location += direction_to_producer * min(consumer_data['speed'], distance)  # Move towards the producer, but don't overshoot
+
+# Simulation loop
+def run_simulation(scene):
+    global last_spawn_time  # Declare this variable as global
+    consumer = bpy.data.objects.get('Consumer')  # Get the consumer object
+    current_time = time.time()  # Get the current time
+
+    if consumer:
+        closest_producer = None
+        closest_distance = float('inf')  # Start with a large distance
+        
+        # Check all producers in the scene
+        for producer in producers:
+            if producer and producer.name in bpy.data.objects:  # Check if producer is valid in the Blender context
+                distance_to_producer = (consumer.location - producer.location).length
+                
+                # Sensing logic: Find the closest producer within sensing distance
+                if distance_to_producer < closest_distance:
+                    closest_distance = distance_to_producer
+                    closest_producer = producer
+
+        # If a producer is within sensing distance
+        if closest_producer and closest_distance <= consumer_data['sensing_distance']:
+            move_consumer_towards_producer(consumer, closest_producer)  # Move towards the closest producer
+        else:
+            move_consumer_randomly(consumer, consumer_data)  # Move randomly if no producer is close enough
+
+        update_consumer_data(consumer_data)  # Update hunger and reproduction
+        check_interaction(consumer)  # Check interaction with any producer
+
+        # Check if it's time to spawn a new producer
+        if current_time - last_spawn_time >= SPAWN_INTERVAL:
+            spawn_new_producer()  # Spawn a new producer
+            last_spawn_time = current_time  # Update the last spawn time
+    else:
+        print("Consumer object not found!")
+
+# Initialize producers at the start of the simulation
+initialize_producers()
+
+# Run the simulation in Blender's scene update handler
+bpy.app.handlers.frame_change_pre.clear()  # Clear previous handlers if any
+bpy.app.handlers.frame_change_pre.append(run_simulation)  # Append simulation handler
