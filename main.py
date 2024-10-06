@@ -13,7 +13,7 @@ HIGHLIGHT_RADIUS = 100  # Radius to highlight nearby consumers
 pygame.init()
 
 # Screen dimensions and setup
-WIDTH, HEIGHT = 2000, 2000
+WIDTH, HEIGHT = 1500, 800
 screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption('Producer and Consumer Simulation')
 
